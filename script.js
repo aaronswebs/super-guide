@@ -1,3 +1,7 @@
+// Configuration
+const MIN_TYPING_DELAY = 1000;
+const MAX_TYPING_DELAY = 2000;
+
 // DOM Elements
 const chatMessages = document.getElementById('chatMessages');
 const messageInput = document.getElementById('messageInput');
@@ -124,8 +128,8 @@ async function sendMessage() {
     // Show typing indicator
     addTypingIndicator();
     
-    // Simulate AI processing time (1-2 seconds)
-    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+    // Simulate AI processing time
+    await new Promise(resolve => setTimeout(resolve, MIN_TYPING_DELAY + Math.random() * (MAX_TYPING_DELAY - MIN_TYPING_DELAY)));
     
     // Remove typing indicator
     removeTypingIndicator();
@@ -143,7 +147,7 @@ async function sendMessage() {
 // Event listeners
 sendButton.addEventListener('click', sendMessage);
 
-messageInput.addEventListener('keypress', (e) => {
+messageInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
         sendMessage();
     }
