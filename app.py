@@ -215,6 +215,18 @@ def health_check():
     })
 
 
+@app.route('/api/context/sources', methods=['GET'])
+def get_context_sources():
+    """Get available and enabled context sources"""
+    agent = get_agent()
+    
+    return jsonify({
+        'success': True,
+        'sources': agent.context_manager.get_available_sources(),
+        'enabled_count': len(agent.context_manager.context_sources)
+    })
+
+
 if __name__ == '__main__':
     # Get Flask configuration from environment
     host = os.getenv('FLASK_HOST', '0.0.0.0')

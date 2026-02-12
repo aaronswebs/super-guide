@@ -8,6 +8,7 @@ import asyncio
 from typing import Optional
 from pathlib import Path
 from dotenv import load_dotenv
+from context_manager import ContextManager
 
 # Load environment variables
 load_dotenv()
@@ -32,6 +33,15 @@ class ChatBotAgent:
         
         # Load agent instructions
         self.instructions = self._load_instructions()
+        
+        # Initialize context manager for grounding
+        self.context_manager = ContextManager()
+        
+        # Append context to instructions if available
+        if self.context_manager.has_context():
+            context_string = self.context_manager.get_context_string()
+            self.instructions += context_string
+            print(f"✓ Loaded {len(self.context_manager.context_sources)} context source(s) for grounding")
         
         # Initialize the agent (will be set up in _initialize_agent)
         self.agent = None
