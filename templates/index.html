@@ -300,6 +300,119 @@
             color: #888;
             font-style: italic;
         }
+
+        /* Attachment styles */
+        .attachment-button {
+            background: transparent;
+            border: 2px solid #e0e0e0;
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            flex-shrink: 0;
+        }
+
+        .attachment-button:hover {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.1);
+        }
+
+        .attachment-button svg {
+            width: 20px;
+            height: 20px;
+            color: #667eea;
+        }
+
+        .attached-files-container {
+            padding: 10px 20px;
+            background: #f8f9fa;
+            border-top: 1px solid #e0e0e0;
+            display: none;
+        }
+
+        .attached-files-container.has-files {
+            display: block;
+        }
+
+        .attached-files-label {
+            font-size: 12px;
+            color: #667eea;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .attached-file {
+            display: inline-flex;
+            align-items: center;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 16px;
+            padding: 6px 12px;
+            margin-right: 8px;
+            margin-bottom: 8px;
+            font-size: 13px;
+            color: #333;
+        }
+
+        .attached-file-icon {
+            margin-right: 6px;
+            color: #667eea;
+        }
+
+        .attached-file-name {
+            max-width: 150px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .attached-file-remove {
+            margin-left: 8px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #888;
+            font-size: 16px;
+            line-height: 1;
+            padding: 0;
+            transition: color 0.2s;
+        }
+
+        .attached-file-remove:hover {
+            color: #c33;
+        }
+
+        .file-uploading {
+            opacity: 0.6;
+        }
+
+        .message-attachments {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(0,0,0,0.1);
+        }
+
+        .message-attachment-badge {
+            font-size: 11px;
+            background: rgba(102, 126, 234, 0.2);
+            color: #667eea;
+            padding: 2px 8px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .message.user .message-attachment-badge {
+            background: rgba(255,255,255,0.2);
+            color: white;
+        }
     </style>
 </head>
 <body>
@@ -326,7 +439,29 @@
             <div id="contextInfo"></div>
         </div>
         
+        <!-- Attached files display -->
+        <div class="attached-files-container" id="attachedFilesContainer">
+            <div class="attached-files-label">📎 Attached Files</div>
+            <div id="attachedFilesList"></div>
+        </div>
+        
         <div class="chat-input-container">
+            <!-- Hidden file input -->
+            <input 
+                type="file" 
+                id="fileInput" 
+                style="display: none;"
+                accept=".txt,.pdf,.md,.json,.csv,.xml,.html,.py,.js,.ts,.yaml,.yml"
+                multiple
+            >
+            
+            <!-- Attachment button -->
+            <button class="attachment-button" id="attachButton" title="Attach files">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                </svg>
+            </button>
+            
             <input 
                 type="text" 
                 id="messageInput" 
@@ -344,8 +479,15 @@
         const contextIndicator = document.getElementById('contextIndicator');
         const contextCount = document.getElementById('contextCount');
         const contextInfo = document.getElementById('contextInfo');
+        const fileInput = document.getElementById('fileInput');
+        const attachButton = document.getElementById('attachButton');
+        const attachedFilesContainer = document.getElementById('attachedFilesContainer');
+        const attachedFilesList = document.getElementById('attachedFilesList');
         
         let isProcessing = false;
+        
+        // Store attached files
+        let attachedFiles = [];
 
         // Load context sources on page load
         async function loadContextSources() {
@@ -378,21 +520,124 @@
             }
         }
 
+        // File attachment functions
+        function updateAttachedFilesDisplay() {
+            if (attachedFiles.length === 0) {
+                attachedFilesContainer.classList.remove('has-files');
+                attachedFilesList.innerHTML = '';
+                return;
+            }
+            
+            attachedFilesContainer.classList.add('has-files');
+            attachedFilesList.innerHTML = attachedFiles.map(file => `
+                <div class="attached-file ${file.uploading ? 'file-uploading' : ''}" data-file-id="${file.file_id || ''}">
+                    <span class="attached-file-icon">📄</span>
+                    <span class="attached-file-name" title="${escapeHtml(file.filename)}">${escapeHtml(file.filename)}</span>
+                    ${file.uploading ? '<span style="margin-left: 6px; font-size: 11px;">Uploading...</span>' : 
+                        `<button class="attached-file-remove" onclick="removeAttachedFile('${file.file_id}')" title="Remove">×</button>`}
+                </div>
+            `).join('');
+        }
+
+        async function uploadFile(file) {
+            const tempId = 'temp_' + Date.now();
+            
+            // Show uploading state
+            attachedFiles.push({
+                tempId: tempId,
+                filename: file.name,
+                uploading: true
+            });
+            updateAttachedFilesDisplay();
+            
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Replace temp entry with real one
+                    const index = attachedFiles.findIndex(f => f.tempId === tempId);
+                    if (index !== -1) {
+                        attachedFiles[index] = {
+                            file_id: data.file_id,
+                            filename: data.filename,
+                            content_length: data.content_length,
+                            uploading: false
+                        };
+                    }
+                } else {
+                    // Remove failed upload
+                    attachedFiles = attachedFiles.filter(f => f.tempId !== tempId);
+                    showError(`Failed to upload ${file.name}: ${data.error}`);
+                }
+            } catch (error) {
+                attachedFiles = attachedFiles.filter(f => f.tempId !== tempId);
+                showError(`Failed to upload ${file.name}: ${error.message}`);
+            }
+            
+            updateAttachedFilesDisplay();
+        }
+
+        async function removeAttachedFile(fileId) {
+            try {
+                const response = await fetch(`/api/upload/${fileId}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success || response.status === 404) {
+                    attachedFiles = attachedFiles.filter(f => f.file_id !== fileId);
+                    updateAttachedFilesDisplay();
+                }
+            } catch (error) {
+                console.error('Failed to remove file:', error);
+                // Remove from UI anyway
+                attachedFiles = attachedFiles.filter(f => f.file_id !== fileId);
+                updateAttachedFilesDisplay();
+            }
+        }
+
+        function handleFileSelect(event) {
+            const files = Array.from(event.target.files);
+            files.forEach(file => uploadFile(file));
+            // Reset input so same file can be selected again
+            event.target.value = '';
+        }
+
         // Add typing indicator element
         const typingIndicator = document.createElement('div');
         typingIndicator.className = 'typing-indicator';
         typingIndicator.innerHTML = '<span></span><span></span><span></span>';
 
-        function addMessage(role, content) {
+        function addMessage(role, content, attachments = []) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${role}`;
             
             const label = role === 'user' ? 'You' : 'Agent';
             
+            let attachmentsHtml = '';
+            if (attachments && attachments.length > 0) {
+                attachmentsHtml = `
+                    <div class="message-attachments">
+                        ${attachments.map(a => `
+                            <span class="message-attachment-badge">📎 ${escapeHtml(a.filename)}</span>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
             messageDiv.innerHTML = `
                 <div>
                     <div class="message-label">${label}</div>
-                    <div class="message-content">${escapeHtml(content)}</div>
+                    <div class="message-content">${escapeHtml(content)}${attachmentsHtml}</div>
                 </div>
             `;
             
@@ -442,9 +687,23 @@
                 return;
             }
             
-            // Add user message
-            addMessage('user', message);
+            // Check if any files are still uploading
+            if (attachedFiles.some(f => f.uploading)) {
+                showError('Please wait for files to finish uploading');
+                return;
+            }
+            
+            // Get current attachments for display
+            const currentAttachments = [...attachedFiles];
+            const fileIds = currentAttachments.map(f => f.file_id).filter(Boolean);
+            
+            // Add user message with attachments
+            addMessage('user', message, currentAttachments);
             messageInput.value = '';
+            
+            // Clear attachments after sending
+            attachedFiles = [];
+            updateAttachedFilesDisplay();
             
             // Show typing indicator
             showTypingIndicator();
@@ -457,7 +716,10 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ message: message })
+                    body: JSON.stringify({ 
+                        message: message,
+                        file_ids: fileIds
+                    })
                 });
                 
                 const data = await response.json();
@@ -488,6 +750,13 @@
                 sendMessage();
             }
         });
+        
+        // File attachment event listeners
+        attachButton.addEventListener('click', () => {
+            fileInput.click();
+        });
+        
+        fileInput.addEventListener('change', handleFileSelect);
 
         // Load context sources when page loads
         loadContextSources();

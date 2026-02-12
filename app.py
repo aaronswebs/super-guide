@@ -8,6 +8,7 @@ import asyncio
 from flask import Flask, render_template, request, jsonify, Response
 from flask_cors import CORS
 from dotenv import load_dotenv
+from werkzeug.utils import secure_filename
 from agent import ChatBotAgent
 
 # Load environment variables
@@ -16,6 +17,20 @@ load_dotenv()
 # Create Flask app
 app = Flask(__name__)
 CORS(app)
+
+# File upload configuration
+UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+ALLOWED_EXTENSIONS = {'txt', 'pdf', 'md', 'json', 'csv', 'xml', 'html', 'py', 'js', 'ts', 'yaml', 'yml'}
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB max file size
+
+# Create upload folder if it doesn't exist
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
+
+# Store uploaded file contexts (session-based, in production use proper session storage)
+uploaded_file_contexts = {}
 
 # Global agent instance
 chat_agent = None
@@ -43,7 +58,7 @@ def chat():
     """
     Handle chat messages from the web UI
     
-    Expects JSON: {"message": "user message"}
+    Expects JSON: {"message": "user message", "file_ids": ["optional file ids"]}
     Returns JSON: {"response": "agent response", "success": true/false}
     """
     try:
@@ -63,6 +78,27 @@ def chat():
                 'error': 'Empty message'
             }), 400
         
+        # Get any attached file contexts
+        file_ids = data.get('file_ids', [])
+        attachment_context = ""
+        
+        if file_ids:
+            attachment_texts = []
+            for file_id in file_ids:
+                if file_id in uploaded_file_contexts:
+                    file_data = uploaded_file_contexts[file_id]
+                    attachment_texts.append(
+                        f"\n--- Attached File: {file_data['filename']} ---\n{file_data['content']}\n--- End of {file_data['filename']} ---\n"
+                    )
+            
+            if attachment_texts:
+                attachment_context = "\n\n[USER ATTACHMENTS - Use these as additional context for your response:]\n" + "\n".join(attachment_texts)
+        
+        # Combine user message with attachment context
+        full_message = user_message
+        if attachment_context:
+            full_message = user_message + attachment_context
+        
         # Get the agent
         agent = get_agent()
         
@@ -76,7 +112,7 @@ def chat():
                 loop.run_until_complete(agent.initialize())
             
             # Get response
-            response = loop.run_until_complete(agent.chat(user_message))
+            response = loop.run_until_complete(agent.chat(full_message))
             
             # Store in conversation history
             conversation_history.append({
@@ -109,7 +145,7 @@ def chat_stream():
     """
     Handle streaming chat messages from the web UI
     
-    Expects JSON: {"message": "user message"}
+    Expects JSON: {"message": "user message", "file_ids": ["optional file ids"]}
     Returns: Server-Sent Events stream
     """
     try:
@@ -129,6 +165,27 @@ def chat_stream():
                 'error': 'Empty message'
             }), 400
         
+        # Get any attached file contexts
+        file_ids = data.get('file_ids', [])
+        attachment_context = ""
+        
+        if file_ids:
+            attachment_texts = []
+            for file_id in file_ids:
+                if file_id in uploaded_file_contexts:
+                    file_data = uploaded_file_contexts[file_id]
+                    attachment_texts.append(
+                        f"\n--- Attached File: {file_data['filename']} ---\n{file_data['content']}\n--- End of {file_data['filename']} ---\n"
+                    )
+            
+            if attachment_texts:
+                attachment_context = "\n\n[USER ATTACHMENTS - Use these as additional context for your response:]\n" + "\n".join(attachment_texts)
+        
+        # Combine user message with attachment context
+        full_message = user_message
+        if attachment_context:
+            full_message = user_message + attachment_context
+        
         def generate():
             """Generator function for streaming response"""
             agent = get_agent()
@@ -145,7 +202,7 @@ def chat_stream():
                 # Collect all chunks from the async generator
                 async def collect_chunks():
                     chunks = []
-                    async for chunk in agent.chat_stream(user_message):
+                    async for chunk in agent.chat_stream(full_message):
                         chunks.append(chunk)
                     return chunks
                 
@@ -224,6 +281,143 @@ def get_context_sources():
         'success': True,
         'sources': agent.context_manager.get_available_sources(),
         'enabled_count': len(agent.context_manager.context_sources)
+    })
+
+
+def allowed_file(filename):
+    """Check if the file extension is allowed"""
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def extract_text_from_file(filepath, filename):
+    """Extract text content from uploaded file"""
+    ext = filename.rsplit('.', 1)[1].lower()
+    
+    try:
+        # For text-based files, read directly
+        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+        return content
+    except Exception as e:
+        print(f"Error reading file {filename}: {e}")
+        return None
+
+
+@app.route('/api/upload', methods=['POST'])
+def upload_file():
+    """
+    Handle file uploads for chat context grounding
+    
+    Returns JSON: {"success": true/false, "file_id": "...", "filename": "...", "content_preview": "..."}
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({
+                'success': False,
+                'error': 'No file provided'
+            }), 400
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({
+                'success': False,
+                'error': 'No file selected'
+            }), 400
+        
+        if not allowed_file(file.filename):
+            return jsonify({
+                'success': False,
+                'error': f'File type not allowed. Allowed types: {{", ".join(ALLOWED_EXTENSIONS)}}'
+            }), 400
+        
+        # Secure the filename and save
+        filename = secure_filename(file.filename)
+        import uuid
+        file_id = str(uuid.uuid4())
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"{file_id}_{filename}")
+        file.save(filepath)
+        
+        # Extract text content
+        content = extract_text_from_file(filepath, filename)
+        
+        if content is None:
+            os.remove(filepath)
+            return jsonify({
+                'success': False,
+                'error': 'Could not extract text from file'
+            }), 400
+        
+        # Store the context
+        uploaded_file_contexts[file_id] = {
+            'filename': filename,
+            'content': content,
+            'filepath': filepath
+        }
+        
+        # Create a preview (first 200 chars)
+        preview = content[:200] + ('...' if len(content) > 200 else '')
+        
+        return jsonify({
+            'success': True,
+            'file_id': file_id,
+            'filename': filename,
+            'content_preview': preview,
+            'content_length': len(content)
+        })
+        
+    except Exception as e:
+        print(f"Error uploading file: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/upload/<file_id>', methods=['DELETE'])
+def remove_uploaded_file(file_id):
+    """Remove an uploaded file from context"""
+    try:
+        if file_id in uploaded_file_contexts:
+            # Remove the file from disk
+            filepath = uploaded_file_contexts[file_id].get('filepath')
+            if filepath and os.path.exists(filepath):
+                os.remove(filepath)
+            
+            # Remove from context
+            del uploaded_file_contexts[file_id]
+            
+            return jsonify({
+                'success': True,
+                'message': 'File removed'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'File not found'
+            }), 404
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/uploaded-files', methods=['GET'])
+def get_uploaded_files():
+    """Get list of currently uploaded files"""
+    files = []
+    for file_id, data in uploaded_file_contexts.items():
+        files.append({
+            'file_id': file_id,
+            'filename': data['filename'],
+            'content_length': len(data['content'])
+        })
+    
+    return jsonify({
+        'success': True,
+        'files': files
     })
 
 

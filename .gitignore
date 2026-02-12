@@ -54,3 +54,6 @@ htmlcov/
 
 # Agent instructions (user will provide their own)
 agent_instructions.txt
+
+# User uploads (temporary file storage)
+uploads/

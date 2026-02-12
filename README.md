@@ -8,6 +8,7 @@ A turn-by-turn chat bot with web UI built using the [Microsoft Azure Agent Frame
 - **GPT-5 Integration**: Leverages the latest GPT-5 model via Azure AI Foundry Agent Service
 - **Turn-by-Turn Chat**: Interactive conversation interface with context awareness
 - **Web UI**: Modern, responsive chat interface built with Flask
+- **File Attachments**: Upload documents directly in the chat for contextual grounding
 - **Customizable Instructions**: Support for custom agent instruction files
 - **Context Grounding**: Ground agent responses in organizational policy documents and SharePoint sites
 - **Async Support**: Built with async/await for optimal performance
@@ -200,6 +201,29 @@ You can ground your agent's responses in organizational policy documents or Shar
 - How to use SharePoint sites
 - Configuration examples
 - Best practices
+
+### Step 6b: Using File Attachments in Chat
+
+The web UI supports uploading files directly in the chat interface for additional context grounding. This allows users to attach documents that the agent can reference when responding.
+
+**Supported File Types:**
+- Text files: `.txt`, `.md`
+- Data files: `.json`, `.csv`, `.xml`, `.yaml`, `.yml`
+- Web files: `.html`
+- Code files: `.py`, `.js`, `.ts`
+
+**How to Use:**
+1. Click the 📎 attachment button next to the message input
+2. Select one or more files (max 5MB each)
+3. Attached files will appear above the input field
+4. Type your message and send - the agent will have access to the file contents
+5. Files can be removed before sending by clicking the × button
+
+**Example Use Cases:**
+- Upload a policy document and ask questions about it
+- Share a code file for review or debugging assistance
+- Attach configuration files for analysis
+- Include error logs for troubleshooting
 
 ### Step 7: Run the Application
 
