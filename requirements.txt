@@ -1,0 +1,18 @@
+# Azure Agent Framework and dependencies
+agent-framework>=0.1.0
+agent-framework-azure-ai>=0.1.0
+
+# Azure SDK
+azure-identity>=1.15.0
+azure-ai-inference>=1.0.0
+
+# Web framework for UI
+flask>=3.0.0
+flask-cors>=4.0.0
+
+# Environment management
+python-dotenv>=1.0.0
+
+# Async support
+aiohttp>=3.9.0
+asyncio>=3.4.3
