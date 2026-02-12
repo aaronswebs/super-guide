@@ -132,6 +132,7 @@ def chat_stream():
         def generate():
             """Generator function for streaming response"""
             agent = get_agent()
+            full_response = []
             
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -141,19 +142,20 @@ def chat_stream():
                 if agent.agent is None:
                     loop.run_until_complete(agent.initialize())
                 
-                # Stream the response
-                full_response = []
-                
-                async def stream_response():
+                # Collect all chunks from the async generator
+                async def collect_chunks():
+                    chunks = []
                     async for chunk in agent.chat_stream(user_message):
-                        full_response.append(chunk)
-                        yield f"data: {chunk}\n\n"
+                        chunks.append(chunk)
+                    return chunks
                 
-                # Run the async generator
-                for chunk in loop.run_until_complete(
-                    asyncio.gather(*[item async for item in stream_response()])
-                ):
-                    yield chunk
+                # Get all chunks
+                chunks = loop.run_until_complete(collect_chunks())
+                
+                # Yield each chunk
+                for chunk in chunks:
+                    full_response.append(chunk)
+                    yield f"data: {chunk}\n\n"
                 
                 # Store in conversation history
                 conversation_history.append({

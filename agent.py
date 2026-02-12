@@ -77,7 +77,7 @@ class ChatBotAgent:
         try:
             # Import Azure Agent Framework components
             from agent_framework import ChatAgent
-            from agent_framework.openai import AzureOpenAIChatClient
+            from agent_framework.azure import AzureOpenAIChatClient
             
             # Create Azure OpenAI chat client
             self.chat_client = AzureOpenAIChatClient(
