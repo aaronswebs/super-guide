@@ -91,7 +91,7 @@ class ContextManager:
         try:
             result = urlparse(path_or_url)
             return bool(result.scheme and result.netloc)
-        except:
+        except Exception:
             return False
     
     def _get_default_context(self, source: str) -> str:
