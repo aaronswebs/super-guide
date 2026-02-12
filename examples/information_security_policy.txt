@@ -1,0 +1,50 @@
+# Example Information Security Policy
+
+## Purpose
+This document establishes the information security policies and guidelines for protecting organizational data and systems.
+
+## Scope
+This policy applies to all employees, contractors, and third-party users with access to organizational systems and data.
+
+## Key Principles
+
+### 1. Data Classification
+- **Public**: Information that can be freely shared
+- **Internal**: Information for internal use only
+- **Confidential**: Sensitive business information
+- **Restricted**: Highly sensitive information requiring special protection
+
+### 2. Access Control
+- Users must authenticate before accessing systems
+- Use strong passwords (minimum 12 characters, complexity requirements)
+- Multi-factor authentication (MFA) required for sensitive systems
+- Principle of least privilege: Users get minimum access needed
+- Regular access reviews quarterly
+
+### 3. Data Protection
+- Encrypt sensitive data in transit and at rest
+- Use approved encryption standards (AES-256, TLS 1.2+)
+- Secure data disposal procedures for end-of-life systems
+- Regular data backups with tested recovery procedures
+
+### 4. Incident Response
+- Report security incidents immediately to security@example.com
+- Follow incident response procedures
+- Document all security incidents
+- Conduct post-incident reviews
+
+### 5. Security Awareness
+- Annual security training required for all users
+- Phishing awareness and testing program
+- Security updates communicated through official channels
+
+### 6. Third-Party Security
+- Security assessments required for all vendors
+- Data processing agreements for third-party processors
+- Regular vendor security reviews
+
+## Compliance
+This policy aligns with ISO 27001, SOC 2, and GDPR requirements.
+
+## Review
+This policy is reviewed annually and updated as needed.

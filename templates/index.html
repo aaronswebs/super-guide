@@ -52,6 +52,24 @@
             opacity: 0.9;
         }
 
+        .context-indicator {
+            font-size: 12px;
+            margin-top: 8px;
+            padding: 6px 12px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            display: inline-block;
+        }
+
+        .context-indicator .badge {
+            background: rgba(255, 255, 255, 0.9);
+            color: #667eea;
+            padding: 2px 8px;
+            border-radius: 8px;
+            font-weight: 600;
+            margin-left: 6px;
+        }
+
         .chat-messages {
             flex: 1;
             overflow-y: auto;
@@ -245,6 +263,43 @@
         .chat-messages::-webkit-scrollbar-thumb:hover {
             background: #764ba2;
         }
+
+        .context-info {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            margin: 10px 20px;
+            border-left: 4px solid #667eea;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .context-info h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .context-source {
+            font-size: 13px;
+            padding: 6px 0;
+            color: #555;
+            display: flex;
+            align-items: center;
+        }
+
+        .context-source::before {
+            content: "✓";
+            color: #667eea;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+
+        .no-context {
+            font-size: 13px;
+            color: #888;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
@@ -252,6 +307,9 @@
         <div class="chat-header">
             <h1>🤖 Azure Agent Chat Bot</h1>
             <p>Powered by GPT-5 via Azure AI Foundry</p>
+            <div class="context-indicator" id="contextIndicator" style="display: none;">
+                Context Sources: <span class="badge" id="contextCount">0</span>
+            </div>
         </div>
         
         <div class="chat-messages" id="chatMessages">
@@ -263,6 +321,9 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Context sources will be dynamically inserted here -->
+            <div id="contextInfo"></div>
         </div>
         
         <div class="chat-input-container">
@@ -280,8 +341,42 @@
         const chatMessages = document.getElementById('chatMessages');
         const messageInput = document.getElementById('messageInput');
         const sendButton = document.getElementById('sendButton');
+        const contextIndicator = document.getElementById('contextIndicator');
+        const contextCount = document.getElementById('contextCount');
+        const contextInfo = document.getElementById('contextInfo');
         
         let isProcessing = false;
+
+        // Load context sources on page load
+        async function loadContextSources() {
+            try {
+                const response = await fetch('/api/context/sources');
+                const data = await response.json();
+                
+                if (data.success && data.enabled_count > 0) {
+                    // Update header indicator
+                    contextCount.textContent = data.enabled_count;
+                    contextIndicator.style.display = 'inline-block';
+                    
+                    // Display enabled sources in the chat area
+                    const enabledSources = data.sources.filter(s => s.enabled);
+                    if (enabledSources.length > 0) {
+                        const contextDiv = document.createElement('div');
+                        contextDiv.className = 'context-info';
+                        contextDiv.innerHTML = `
+                            <h3>📚 Active Context Sources</h3>
+                            ${enabledSources.map(source => `
+                                <div class="context-source">${source.name}</div>
+                            `).join('')}
+                        `;
+                        contextInfo.appendChild(contextDiv);
+                        scrollToBottom();
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load context sources:', error);
+            }
+        }
 
         // Add typing indicator element
         const typingIndicator = document.createElement('div');
@@ -393,6 +488,9 @@
                 sendMessage();
             }
         });
+
+        // Load context sources when page loads
+        loadContextSources();
 
         // Focus input on load
         messageInput.focus();

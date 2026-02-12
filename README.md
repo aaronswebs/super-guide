@@ -9,6 +9,7 @@ A turn-by-turn chat bot with web UI built using the [Microsoft Azure Agent Frame
 - **Turn-by-Turn Chat**: Interactive conversation interface with context awareness
 - **Web UI**: Modern, responsive chat interface built with Flask
 - **Customizable Instructions**: Support for custom agent instruction files
+- **Context Grounding**: Ground agent responses in organizational policy documents and SharePoint sites
 - **Async Support**: Built with async/await for optimal performance
 - **Streaming Responses**: Real-time response streaming (optional)
 
@@ -179,6 +180,27 @@ Example interactions:
 
 **Note**: The application will automatically load your `agent_instructions.txt` file if it exists, otherwise it will use the placeholder.
 
+### Step 6a: (Optional) Configure Context Grounding
+
+You can ground your agent's responses in organizational policy documents or SharePoint sites. This is useful for ensuring responses align with your organization's policies.
+
+**Quick Setup:**
+
+1. In your `.env` file, add context sources:
+   ```bash
+   CONTEXT_SOURCES=information_security,ai_ml_governance
+   CONTEXT_INFORMATION_SECURITY=examples/information_security_policy.txt
+   CONTEXT_AI_ML_GOVERNANCE=examples/ai_ml_governance_policy.txt
+   ```
+
+2. The repository includes example policy documents in the `examples/` directory you can use or customize.
+
+**For complete details**, see [CONTEXT_GROUNDING.md](CONTEXT_GROUNDING.md) for:
+- All available context types
+- How to use SharePoint sites
+- Configuration examples
+- Best practices
+
 ### Step 7: Run the Application
 
 #### Option A: Web UI (Recommended)
@@ -245,6 +267,12 @@ You:
 | `AZURE_AI_PROJECT_NAME` | ⚪ No | Your AI Foundry project name | `my-ai-project` |
 | `AGENT_NAME` | ⚪ No | Display name for your agent | `ChatBot Agent` |
 | `AGENT_INSTRUCTIONS_FILE` | ⚪ No | Path to instructions file | `agent_instructions.txt` |
+| `CONTEXT_SOURCES` | ⚪ No | Comma-separated context sources to enable | `information_security,ai_ml_governance` |
+| `CONTEXT_INFORMATION_SECURITY` | ⚪ No | Path/URL to Information Security policy | `examples/info_sec_policy.txt` |
+| `CONTEXT_RISK_MANAGEMENT` | ⚪ No | Path/URL to Risk Management policy | `https://sharepoint.com/...` |
+| `CONTEXT_COMPLIANCE_REGULATORY` | ⚪ No | Path/URL to Compliance documents | `examples/compliance.txt` |
+| `CONTEXT_DATA_GOVERNANCE` | ⚪ No | Path/URL to Data Governance policy | `examples/data_gov.txt` |
+| `CONTEXT_AI_ML_GOVERNANCE` | ⚪ No | Path/URL to AI/ML Governance policy | `examples/ai_ml_policy.txt` |
 | `FLASK_HOST` | ⚪ No | Web server host | `0.0.0.0` |
 | `FLASK_PORT` | ⚪ No | Web server port | `5000` |
 | `FLASK_DEBUG` | ⚪ No | Enable Flask debug mode | `true` or `false` |
@@ -283,14 +311,19 @@ Assistant: "..."
 super-guide/
 ├── agent.py                           # Core agent implementation
 ├── app.py                             # Flask web application
+├── context_manager.py                 # Context grounding manager
 ├── requirements.txt                   # Python dependencies
 ├── .env.example                       # Environment variables template
 ├── .gitignore                        # Git ignore rules
 ├── agent_instructions_placeholder.txt # Placeholder instructions
 ├── agent_instructions.txt            # Your custom instructions (create this)
+├── examples/                          # Example policy documents
+│   ├── information_security_policy.txt
+│   └── ai_ml_governance_policy.txt
 ├── templates/
 │   └── index.html                    # Web UI template
-└── README.md                         # This file
+├── README.md                         # This file
+└── CONTEXT_GROUNDING.md              # Context grounding documentation
 ```
 
 ## 🔍 API Endpoints
@@ -345,6 +378,31 @@ Health check endpoint.
   "status": "healthy",
   "agent_initialized": true,
   "agent_name": "ChatBot Agent"
+}
+```
+
+### `GET /api/context/sources`
+Get available and enabled context sources for grounding.
+
+**Response:**
+```json
+{
+  "success": true,
+  "enabled_count": 2,
+  "sources": [
+    {
+      "id": "information_security",
+      "name": "Information Security Policy",
+      "description": "Ground responses in information security policies",
+      "enabled": true
+    },
+    {
+      "id": "ai_ml_governance",
+      "name": "AI/ML Governance Policy",
+      "description": "Ground responses in AI/ML governance",
+      "enabled": true
+    }
+  ]
 }
 ```
 
