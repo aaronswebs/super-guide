@@ -57,3 +57,5 @@ agent_instructions.txt
 
 # User uploads (temporary file storage)
 uploads/
+# ARM template deployment folder (contains sensitive deployment configurations)
+../Sample_Agent/
