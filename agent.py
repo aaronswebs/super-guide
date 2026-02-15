@@ -1,6 +1,14 @@
 """
 Azure Agent Framework Chat Bot
 Main agent implementation using Azure AI Foundry and GPT-5
+
+Supports two authentication modes:
+  - managed_identity: Uses Azure Managed Identity (Entra ID) via DefaultAzureCredential.
+    Works automatically in Azure App Service with a System-assigned Managed Identity,
+    and falls back to your local 'az login' session for development.
+  - api_key: Uses a traditional Azure OpenAI API key (for local development only).
+
+Set AZURE_OPENAI_AUTH_TYPE in your .env file to choose the mode (default: managed_identity).
 """
 
 import os
@@ -22,11 +30,15 @@ class ChatBotAgent:
     def __init__(self):
         """Initialize the chat bot agent with Azure AI configuration"""
         self.endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-        self.api_key = os.getenv("AZURE_OPENAI_API_KEY")
         self.deployment_name = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
         self.api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2025-06-01-preview")
         self.agent_name = os.getenv("AGENT_NAME", "ChatBot Agent")
         self.instructions_file = os.getenv("AGENT_INSTRUCTIONS_FILE", "agent_instructions_placeholder.txt")
+        
+        # Authentication mode: "managed_identity" (default) or "api_key"
+        self.auth_type = os.getenv("AZURE_OPENAI_AUTH_TYPE", "managed_identity").lower().strip()
+        self.api_key = os.getenv("AZURE_OPENAI_API_KEY") if self.auth_type == "api_key" else None
+        self.credential = None  # Set during initialize() for managed_identity
         
         # Validate required configuration
         self._validate_config()
@@ -49,11 +61,15 @@ class ChatBotAgent:
         
     def _validate_config(self):
         """Validate that all required configuration is present"""
+        # These are always required regardless of auth type
         required_vars = {
             "AZURE_OPENAI_ENDPOINT": self.endpoint,
-            "AZURE_OPENAI_API_KEY": self.api_key,
             "AZURE_OPENAI_DEPLOYMENT_NAME": self.deployment_name
         }
+        
+        # API key is only required when using api_key auth type
+        if self.auth_type == "api_key":
+            required_vars["AZURE_OPENAI_API_KEY"] = self.api_key
         
         missing_vars = [var for var, value in required_vars.items() if not value]
         
@@ -61,6 +77,12 @@ class ChatBotAgent:
             raise ValueError(
                 f"Missing required environment variables: {', '.join(missing_vars)}\n"
                 f"Please copy .env.example to .env and fill in your Azure credentials."
+            )
+        
+        if self.auth_type not in ("managed_identity", "api_key"):
+            raise ValueError(
+                f"Invalid AZURE_OPENAI_AUTH_TYPE: '{self.auth_type}'. "
+                f"Must be 'managed_identity' or 'api_key'."
             )
     
     def _load_instructions(self) -> str:
@@ -89,13 +111,26 @@ class ChatBotAgent:
             from agent_framework import ChatAgent
             from agent_framework.azure import AzureOpenAIChatClient
             
-            # Create Azure OpenAI chat client
-            self.chat_client = AzureOpenAIChatClient(
-                endpoint=self.endpoint,
-                api_key=self.api_key,
-                deployment_name=self.deployment_name,
-                api_version=self.api_version
-            )
+            # Create Azure OpenAI chat client based on auth type
+            if self.auth_type == "managed_identity":
+                from azure.identity import DefaultAzureCredential
+                
+                self.credential = DefaultAzureCredential()
+                self.chat_client = AzureOpenAIChatClient(
+                    endpoint=self.endpoint,
+                    credential=self.credential,
+                    deployment_name=self.deployment_name,
+                    api_version=self.api_version
+                )
+                print(f"✓ Using Managed Identity (Entra ID) authentication")
+            else:
+                self.chat_client = AzureOpenAIChatClient(
+                    endpoint=self.endpoint,
+                    api_key=self.api_key,
+                    deployment_name=self.deployment_name,
+                    api_version=self.api_version
+                )
+                print(f"✓ Using API key authentication")
             
             # Create the chat agent
             self.agent = ChatAgent(

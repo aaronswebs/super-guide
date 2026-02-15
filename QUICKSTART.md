@@ -50,7 +50,7 @@ If you just want to test the application structure without Azure credentials:
    - Click "Request Access" - fill out the form
    - Wait for approval email (1-3 business days)
    - Once approved: Deploy → Choose deployment name (e.g., `gpt-5-deployment`)
-   - Note your endpoint URL and API key
+   - Note your endpoint URL (and API key, if using API key auth)
 
 #### 2. Set Up the Application (5 minutes)
 
@@ -74,9 +74,14 @@ nano .env  # Or use your preferred editor
 **Edit `.env` with your Azure credentials:**
 ```bash
 AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com/
-AZURE_OPENAI_API_KEY=your-api-key-here
 AZURE_OPENAI_DEPLOYMENT_NAME=gpt-5-deployment
 AZURE_OPENAI_API_VERSION=2025-06-01-preview
+
+# Authentication: "managed_identity" (default) or "api_key"
+AZURE_OPENAI_AUTH_TYPE=managed_identity
+
+# Only required when AZURE_OPENAI_AUTH_TYPE=api_key
+# AZURE_OPENAI_API_KEY=your-api-key-here
 ```
 
 #### 3. (Optional) Create Custom Instructions (2 minutes)
@@ -140,10 +145,12 @@ curl -X POST http://localhost:5000/api/chat \
 ## ❓ Common Issues
 
 **"Missing required environment variables"**
-- Make sure you created `.env` and filled in all required fields
+- Make sure you created `.env` and filled in `AZURE_OPENAI_ENDPOINT` and `AZURE_OPENAI_DEPLOYMENT_NAME`
+- `AZURE_OPENAI_API_KEY` is only required when `AZURE_OPENAI_AUTH_TYPE=api_key`
 
 **"401 Unauthorized"**
-- Double-check your API key in `.env`
+- If using Managed Identity: ensure your identity has the **Cognitive Services OpenAI User** RBAC role; locally, ensure you're signed in via `az login`
+- If using API key: double-check your API key in `.env`; some Azure policies disable key-based auth
 - Ensure your Azure subscription is active
 
 **"Deployment not found"**

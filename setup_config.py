@@ -78,10 +78,27 @@ def main():
         required=True
     )
     
-    api_key = get_user_input(
-        "Azure OpenAI API Key",
-        required=True
+    print()
+    print("🔐 Authentication Mode:")
+    print("  1. managed_identity - Uses Azure Managed Identity (Entra ID)")
+    print("     Works automatically in App Service; locally uses 'az login'.")
+    print("  2. api_key          - Uses an Azure OpenAI API key")
+    print()
+    auth_type_input = get_user_input(
+        "Authentication Type (1 or 2)",
+        default="1",
+        required=False
     )
+    auth_type = "api_key" if auth_type_input in ("2", "api_key") else "managed_identity"
+    
+    api_key = ""
+    if auth_type == "api_key":
+        api_key = get_user_input(
+            "Azure OpenAI API Key",
+            required=True
+        )
+    else:
+        print("  → Using Managed Identity — no API key needed.")
     
     deployment_name = get_user_input(
         "GPT-5 Deployment Name (e.g., gpt-5-deployment)",
@@ -162,7 +179,12 @@ def main():
 
 # Required: Azure OpenAI/AI Foundry Configuration
 AZURE_OPENAI_ENDPOINT={endpoint}
-AZURE_OPENAI_API_KEY={api_key}
+
+# Authentication Type: "managed_identity" (default) or "api_key"
+AZURE_OPENAI_AUTH_TYPE={auth_type}
+
+# Azure OpenAI API Key (only required when AZURE_OPENAI_AUTH_TYPE=api_key)
+AZURE_OPENAI_API_KEY={api_key if api_key else ''}
 AZURE_OPENAI_DEPLOYMENT_NAME={deployment_name}
 AZURE_OPENAI_API_VERSION={api_version}
 

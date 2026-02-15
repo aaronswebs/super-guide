@@ -105,8 +105,12 @@ After deployment:
 1. Go to your deployment details
 2. Copy the following values:
    - **Endpoint URL**: `https://your-resource-name.openai.azure.com/`
-   - **API Key**: Found under "Keys and Endpoint"
    - **Deployment Name**: The name you chose during deployment
+
+> **Note**: If your organization's Azure policy enforces Managed Identity (Entra ID) authentication,
+> you will **not** need an API key. The application defaults to Managed Identity and acquires tokens
+> automatically via `DefaultAzureCredential`. If you need to use an API key instead, copy it from
+> **Keys and Endpoint** in the Azure Portal.
 
 ### Step 5: Configure Environment Variables
 
@@ -120,9 +124,16 @@ After deployment:
    ```bash
    # Required: Azure OpenAI/AI Foundry Configuration
    AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com/
-   AZURE_OPENAI_API_KEY=your-api-key-here
    AZURE_OPENAI_DEPLOYMENT_NAME=gpt-5-deployment
    AZURE_OPENAI_API_VERSION=2025-06-01-preview
+
+   # Authentication Type: "managed_identity" (default) or "api_key"
+   # managed_identity uses Azure Entra ID via DefaultAzureCredential (recommended).
+   # api_key uses a traditional API key (set AZURE_OPENAI_API_KEY below).
+   AZURE_OPENAI_AUTH_TYPE=managed_identity
+
+   # Azure OpenAI API Key (only required when AZURE_OPENAI_AUTH_TYPE=api_key)
+   # AZURE_OPENAI_API_KEY=your-api-key-here
 
    # Optional: Additional Azure Details
    AZURE_SUBSCRIPTION_ID=your-subscription-id
@@ -139,7 +150,10 @@ After deployment:
    FLASK_DEBUG=true
    ```
 
-**Important**: Never commit your `.env` file to version control! It contains sensitive credentials.
+> **Managed Identity vs API Key**: Many Azure subscriptions have policies that disable API key
+> authentication on Azure OpenAI resources. The default `managed_identity` mode works automatically
+> in Azure App Service (using the System-assigned Managed Identity) and locally (using your
+> `az login` session). Only switch to `api_key` if your environment explicitly allows API keys.
 
 ### Step 6: Create Your Agent Instructions File
 
@@ -283,7 +297,8 @@ You:
 | Variable | Required | Description | Example |
 |----------|----------|-------------|---------|
 | `AZURE_OPENAI_ENDPOINT` | ✅ Yes | Your Azure OpenAI endpoint URL | `https://my-resource.openai.azure.com/` |
-| `AZURE_OPENAI_API_KEY` | ✅ Yes | Your Azure OpenAI API key | `abc123...` |
+| `AZURE_OPENAI_AUTH_TYPE` | ⚪ No | Authentication mode: `managed_identity` (default) or `api_key` | `managed_identity` |
+| `AZURE_OPENAI_API_KEY` | ⚠️ Conditional | Required only when `AUTH_TYPE=api_key` | `abc123...` |
 | `AZURE_OPENAI_DEPLOYMENT_NAME` | ✅ Yes | Name of your GPT-5 deployment | `gpt-5-deployment` |
 | `AZURE_OPENAI_API_VERSION` | ⚪ No | API version to use | `2025-06-01-preview` |
 | `AZURE_SUBSCRIPTION_ID` | ⚪ No | Your Azure subscription ID | `12345678-1234-...` |
@@ -473,8 +488,8 @@ curl http://localhost:5000/api/history
 
 **Solution**: Ensure your `.env` file exists and contains all required variables:
 - `AZURE_OPENAI_ENDPOINT`
-- `AZURE_OPENAI_API_KEY`
 - `AZURE_OPENAI_DEPLOYMENT_NAME`
+- `AZURE_OPENAI_API_KEY` (only if `AZURE_OPENAI_AUTH_TYPE=api_key`)
 
 ### Issue: "Azure Agent Framework not installed properly"
 
@@ -487,10 +502,16 @@ pip install -r requirements.txt
 ### Issue: "401 Unauthorized" or "403 Forbidden"
 
 **Solutions**:
-1. Verify your API key is correct in `.env`
-2. Ensure your Azure subscription is active
-3. Check that GPT-5 access has been approved
-4. Verify the deployment name matches exactly
+1. **Managed Identity mode** (`AZURE_OPENAI_AUTH_TYPE=managed_identity`):
+   - Ensure your App Service has a **System-assigned Managed Identity** enabled
+   - Verify the Managed Identity has the **Cognitive Services OpenAI User** RBAC role on the Azure OpenAI resource
+   - For local development, ensure you are signed in via `az login` with an account that has the correct RBAC role
+2. **API Key mode** (`AZURE_OPENAI_AUTH_TYPE=api_key`):
+   - Verify your API key is correct in `.env`
+   - Check that your Azure OpenAI resource allows local (key-based) authentication — some Azure policies disable this
+3. Ensure your Azure subscription is active
+4. Check that GPT-5 access has been approved
+5. Verify the deployment name matches exactly
 
 ### Issue: "Deployment not found"
 
