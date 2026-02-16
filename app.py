@@ -20,13 +20,20 @@ load_dotenv()
 # ---------------------------------------------------------------------------
 # Azure AI Foundry Tracing – Environment Variables
 # ---------------------------------------------------------------------------
-# AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED  – azure-core-tracing- SDK
+# AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED  – azure-core-tracing SDK
 # OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT – opentelemetry-instrumentation-openai-v2
-# Both must be "true" for full prompt/completion capture across all layers.
+# ENABLE_INSTRUMENTATION – Agent Framework ChatTelemetryLayer (must be "true"
+#     for the framework's own span creation and attribute recording)
+# ENABLE_SENSITIVE_DATA – Agent Framework _capture_messages() (must be "true"
+#     together with ENABLE_INSTRUMENTATION for LLM input/output content to be
+#     recorded as span events visible in the Foundry Classic Tracing blade)
+# All must be "true" for full prompt/completion capture across all layers.
 # Set to "false" in production if prompt content is sensitive.
 # ---------------------------------------------------------------------------
 os.environ.setdefault("AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED", "true")
 os.environ.setdefault("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", "true")
+os.environ.setdefault("ENABLE_INSTRUMENTATION", "true")
+os.environ.setdefault("ENABLE_SENSITIVE_DATA", "true")
 
 # Set OTEL_SERVICE_NAME so the Foundry Tracing blade can identify these traces.
 os.environ.setdefault("OTEL_SERVICE_NAME", os.getenv("AZURE_AI_PROJECT_NAME", "grc-agent"))
@@ -100,6 +107,27 @@ if _ai_connection_string:
     print(f"✓ Application Insights telemetry enabled (service.name={_service_name})")
 else:
     print("⚠ APPLICATIONINSIGHTS_CONNECTION_STRING not set — telemetry disabled")
+
+# ---------------------------------------------------------------------------
+# Agent Framework – ChatTelemetryLayer activation
+# ---------------------------------------------------------------------------
+# The Agent Framework's AzureOpenAIChatClient inherits from ChatTelemetryLayer
+# which wraps every get_response() call with OpenTelemetry spans.  However,
+# the telemetry layer is **gated** by ObservabilitySettings:
+#   - OBSERVABILITY_SETTINGS.ENABLED  → must be True for any spans
+#   - OBSERVABILITY_SETTINGS.SENSITIVE_DATA_ENABLED → must be True for
+#     _capture_messages() to record LLM input/output as span events
+#
+# Setting the env vars above handles the default path, but we also call
+# enable_instrumentation() explicitly to cover cases where the settings
+# object was already constructed before the env vars took effect.
+# ---------------------------------------------------------------------------
+try:
+    from agent_framework.observability import enable_instrumentation as _af_enable
+    _af_enable(enable_sensitive_data=True)
+    print("✓ Agent Framework ChatTelemetryLayer enabled (sensitive data capture ON)")
+except ImportError:
+    print("⚠ agent_framework.observability not available — framework telemetry not activated")
 
 # ---------------------------------------------------------------------------
 # Azure AI Foundry / OpenAI SDK Tracing
