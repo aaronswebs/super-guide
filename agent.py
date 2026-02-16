@@ -17,6 +17,7 @@ from typing import Optional
 from pathlib import Path
 from dotenv import load_dotenv
 from context_manager import ContextManager
+from agent_framework import AgentSession
 
 # Load environment variables
 load_dotenv()
@@ -32,7 +33,7 @@ class ChatBotAgent:
         self.endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
         self.deployment_name = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
         self.api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2025-04-01-preview")
-        self.agent_name = os.getenv("AGENT_NAME", "ChatBot Agent")
+        self.agent_name = os.getenv("AGENT_NAME", "ChatBot_Agent")
         self.instructions_file = os.getenv("AGENT_INSTRUCTIONS_FILE", "agent_instructions_placeholder.txt")
         
         # Authentication mode: "managed_identity" (default) or "api_key"
@@ -150,12 +151,13 @@ class ChatBotAgent:
             print(f"Error initializing agent: {e}")
             raise
     
-    async def chat(self, message: str) -> str:
+    async def chat(self, message: str, session: AgentSession | None = None) -> str:
         """
         Send a message to the agent and get a response
         
         Args:
             message: User's message
+            session: AgentSession for conversation history retention
             
         Returns:
             Agent's response
@@ -164,8 +166,8 @@ class ChatBotAgent:
             await self.initialize()
         
         try:
-            # Run the agent with the user's message
-            result = await self.agent.run(message)
+            # Run the agent with the user's message and session for history
+            result = await self.agent.run(message, session=session)
             
             # Extract the response text
             if hasattr(result, 'text'):
@@ -180,12 +182,13 @@ class ChatBotAgent:
             print(error_msg)
             return f"I apologize, but I encountered an error: {e}"
     
-    async def chat_stream(self, message: str):
+    async def chat_stream(self, message: str, session: AgentSession | None = None):
         """
         Send a message to the agent and stream the response
         
         Args:
             message: User's message
+            session: AgentSession for conversation history retention
             
         Yields:
             Chunks of the agent's response
@@ -194,8 +197,8 @@ class ChatBotAgent:
             await self.initialize()
         
         try:
-            # Run the agent with streaming enabled
-            async for chunk in self.agent.run(message, stream=True):
+            # Run the agent with streaming enabled and session for history
+            async for chunk in self.agent.run(message, stream=True, session=session):
                 if hasattr(chunk, 'text'):
                     yield chunk.text
                 else:

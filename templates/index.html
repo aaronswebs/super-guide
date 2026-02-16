@@ -423,6 +423,7 @@
             <div class="context-indicator" id="contextIndicator" style="display: none;">
                 Context Sources: <span class="badge" id="contextCount">0</span>
             </div>
+            <button class="clear-button" id="newChatButton">🔄 New Chat</button>
         </div>
         
         <div class="chat-messages" id="chatMessages">
@@ -485,6 +486,9 @@
         const attachedFilesList = document.getElementById('attachedFilesList');
         
         let isProcessing = false;
+        
+        // Session tracking for conversation context retention
+        let sessionId = crypto.randomUUID();
         
         // Store attached files
         let attachedFiles = [];
@@ -718,7 +722,8 @@
                     },
                     body: JSON.stringify({ 
                         message: message,
-                        file_ids: fileIds
+                        file_ids: fileIds,
+                        session_id: sessionId
                     })
                 });
                 
@@ -727,6 +732,10 @@
                 hideTypingIndicator();
                 
                 if (data.success) {
+                    // Capture server-assigned session_id if returned
+                    if (data.session_id) {
+                        sessionId = data.session_id;
+                    }
                     addMessage('assistant', data.response);
                 } else {
                     showError(data.error || 'Unknown error occurred');
@@ -757,6 +766,37 @@
         });
         
         fileInput.addEventListener('change', handleFileSelect);
+
+        // New Chat button handler
+        document.getElementById('newChatButton').addEventListener('click', async () => {
+            // Clear server-side session
+            try {
+                await fetch('/api/history/clear', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: sessionId })
+                });
+            } catch (e) {
+                console.error('Failed to clear server session:', e);
+            }
+            // Reset session
+            sessionId = crypto.randomUUID();
+            // Clear chat UI — keep only the initial greeting
+            chatMessages.innerHTML = `
+                <div class="message assistant">
+                    <div>
+                        <div class="message-label">Agent</div>
+                        <div class="message-content">
+                            Hello! I'm your AI assistant powered by Azure Agent Framework and GPT-5. How can I help you today?
+                        </div>
+                    </div>
+                </div>
+                <div id="contextInfo"></div>
+            `;
+            // Reload context sources
+            loadContextSources();
+            messageInput.focus();
+        });
 
         // Load context sources when page loads
         loadContextSources();

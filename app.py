@@ -12,6 +12,7 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
 from agent import ChatBotAgent
+from agent_framework import AgentSession
 
 # Load environment variables
 load_dotenv()
@@ -147,8 +148,29 @@ uploaded_file_contexts = {}
 # Global agent instance
 chat_agent = None
 
-# Store conversation history (in production, use a database)
-conversation_history = []
+# Store agent sessions keyed by session_id (in production, use Redis or a database)
+agent_sessions: dict[str, AgentSession] = {}
+
+# Store conversation history per session for the UI (in production, use a database)
+conversation_histories: dict[str, list] = {}
+
+
+def _get_or_create_session(session_id: str | None) -> tuple[str, AgentSession]:
+    """Get an existing session or create a new one.
+
+    Returns (session_id, AgentSession).
+    """
+    import uuid
+
+    if session_id and session_id in agent_sessions:
+        return session_id, agent_sessions[session_id]
+
+    # Create a new session
+    sid = session_id or str(uuid.uuid4())
+    session = AgentSession(session_id=sid)
+    agent_sessions[sid] = session
+    conversation_histories[sid] = []
+    return sid, session
 
 
 def get_agent():
@@ -170,8 +192,8 @@ def chat():
     """
     Handle chat messages from the web UI
     
-    Expects JSON: {"message": "user message", "file_ids": ["optional file ids"]}
-    Returns JSON: {"response": "agent response", "success": true/false}
+    Expects JSON: {"message": "user message", "session_id": "optional", "file_ids": ["optional file ids"]}
+    Returns JSON: {"response": "agent response", "session_id": "...", "success": true/false}
     """
     try:
         data = request.get_json()
@@ -189,6 +211,9 @@ def chat():
                 'success': False,
                 'error': 'Empty message'
             }), 400
+        
+        # Get or create session for conversation continuity
+        session_id, agent_session = _get_or_create_session(data.get('session_id'))
         
         # Get any attached file contexts
         file_ids = data.get('file_ids', [])
@@ -230,8 +255,9 @@ def chat():
                 span.set_attribute("gen_ai.operation.name", "chat")
                 span.set_attribute("chat.message_length", len(full_message))
                 span.set_attribute("chat.has_attachments", bool(file_ids))
+                span.set_attribute("chat.session_id", session_id)
 
-                response = loop.run_until_complete(agent.chat(full_message))
+                response = loop.run_until_complete(agent.chat(full_message, session=agent_session))
 
                 elapsed = time.time() - start_time
                 span.set_attribute("chat.response_length", len(response))
@@ -249,19 +275,21 @@ def chat():
                     },
                 )
             
-            # Store in conversation history
-            conversation_history.append({
+            # Store in conversation history for this session
+            history = conversation_histories.setdefault(session_id, [])
+            history.append({
                 'role': 'user',
                 'content': user_message
             })
-            conversation_history.append({
+            history.append({
                 'role': 'assistant',
                 'content': response
             })
             
             return jsonify({
                 'success': True,
-                'response': response
+                'response': response,
+                'session_id': session_id
             })
             
         finally:
@@ -280,7 +308,7 @@ def chat_stream():
     """
     Handle streaming chat messages from the web UI
     
-    Expects JSON: {"message": "user message", "file_ids": ["optional file ids"]}
+    Expects JSON: {"message": "user message", "session_id": "optional", "file_ids": ["optional file ids"]}
     Returns: Server-Sent Events stream
     """
     try:
@@ -299,6 +327,9 @@ def chat_stream():
                 'success': False,
                 'error': 'Empty message'
             }), 400
+        
+        # Get or create session for conversation continuity
+        session_id, agent_session = _get_or_create_session(data.get('session_id'))
         
         # Get any attached file contexts
         file_ids = data.get('file_ids', [])
@@ -337,7 +368,7 @@ def chat_stream():
                 # Collect all chunks from the async generator
                 async def collect_chunks():
                     chunks = []
-                    async for chunk in agent.chat_stream(full_message):
+                    async for chunk in agent.chat_stream(full_message, session=agent_session):
                         chunks.append(chunk)
                     return chunks
                 
@@ -349,12 +380,13 @@ def chat_stream():
                     full_response.append(chunk)
                     yield f"data: {chunk}\n\n"
                 
-                # Store in conversation history
-                conversation_history.append({
+                # Store in conversation history for this session
+                history = conversation_histories.setdefault(session_id, [])
+                history.append({
                     'role': 'user',
                     'content': user_message
                 })
-                conversation_history.append({
+                history.append({
                     'role': 'assistant',
                     'content': ''.join(full_response)
                 })
@@ -376,21 +408,29 @@ def chat_stream():
 
 @app.route('/api/history', methods=['GET'])
 def get_history():
-    """Get conversation history"""
+    """Get conversation history for a session"""
+    session_id = request.args.get('session_id', '')
+    history = conversation_histories.get(session_id, [])
     return jsonify({
         'success': True,
-        'history': conversation_history
+        'history': history,
+        'session_id': session_id
     })
 
 
 @app.route('/api/history/clear', methods=['POST'])
 def clear_history():
-    """Clear conversation history"""
-    global conversation_history
-    conversation_history = []
+    """Clear conversation history and session (starts a new chat)"""
+    data = request.get_json() or {}
+    session_id = data.get('session_id', '')
+    
+    # Remove the session and its history
+    agent_sessions.pop(session_id, None)
+    conversation_histories.pop(session_id, None)
+    
     return jsonify({
         'success': True,
-        'message': 'History cleared'
+        'message': 'Session cleared'
     })
 
 
