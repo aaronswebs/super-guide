@@ -59,3 +59,4 @@ agent_instructions.txt
 uploads/
 # ARM template deployment folder (contains sensitive deployment configurations)
 ../Sample_Agent/
+../Agent_Deployment/
