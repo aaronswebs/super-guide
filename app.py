@@ -4,6 +4,8 @@ Flask-based web interface for turn-by-turn chat
 """
 
 import os
+import time
+import logging
 import asyncio
 from flask import Flask, render_template, request, jsonify, Response
 from flask_cors import CORS
@@ -14,9 +16,119 @@ from agent import ChatBotAgent
 # Load environment variables
 load_dotenv()
 
+# ---------------------------------------------------------------------------
+# Azure AI Foundry Tracing – Environment Variables
+# ---------------------------------------------------------------------------
+# AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED  – azure-core-tracing- SDK
+# OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT – opentelemetry-instrumentation-openai-v2
+# Both must be "true" for full prompt/completion capture across all layers.
+# Set to "false" in production if prompt content is sensitive.
+# ---------------------------------------------------------------------------
+os.environ.setdefault("AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED", "true")
+os.environ.setdefault("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", "true")
+
+# Set OTEL_SERVICE_NAME so the Foundry Tracing blade can identify these traces.
+os.environ.setdefault("OTEL_SERVICE_NAME", os.getenv("AZURE_AI_PROJECT_NAME", "grc-agent"))
+
+# ---------------------------------------------------------------------------
+# Application Insights / Azure Monitor OpenTelemetry
+# ---------------------------------------------------------------------------
+# Configure the Azure Monitor OpenTelemetry distro **before** creating the
+# Flask app so that the Flask instrumentor is activated automatically.
+# The SDK reads APPLICATIONINSIGHTS_CONNECTION_STRING from the environment.
+# ---------------------------------------------------------------------------
+from azure.monitor.opentelemetry import configure_azure_monitor
+from opentelemetry import trace
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import SpanProcessor
+from opentelemetry.instrumentation.flask import FlaskInstrumentor
+
+
+class _GenAISpanEnricher(SpanProcessor):
+    """Ensures ``gen_ai.system`` is present on every GenAI span.
+
+    The Foundry Tracing blade filters spans with::
+
+        customDimensions["gen_ai.system"] is not null
+
+    Some versions of opentelemetry-instrumentation-openai-v2 set this
+    attribute only on span *events* (which land in AppTraces) but NOT on the
+    span itself (which lands in AppDependencies).  This processor fills the
+    gap so Foundry can discover the spans.
+    """
+
+    _GENAI_SPAN_PREFIXES = ("chat ", "completion ", "embeddings ")
+
+    def on_start(self, span, parent_context=None):  # Span is still mutable here
+        name = getattr(span, "name", "") or ""
+        if any(name.startswith(p) for p in self._GENAI_SPAN_PREFIXES):
+            span.set_attribute("gen_ai.system", "openai")
+
+    def on_end(self, span):
+        pass
+
+    def shutdown(self):
+        pass
+
+    def force_flush(self, timeout_millis=None):
+        return True
+
+_ai_connection_string = os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
+if _ai_connection_string:
+    # Explicitly set service.name so the Azure App Service resource detector
+    # (which defaults to WEBSITE_SITE_NAME) does NOT override it.
+    # This ensures cloud_RoleName in App Insights matches the AI Foundry
+    # project name, which is required for the Tracing blade to find the spans.
+    _service_name = os.getenv(
+        "OTEL_SERVICE_NAME",
+        os.getenv("AZURE_AI_PROJECT_NAME", "grc-agent"),
+    )
+    configure_azure_monitor(
+        connection_string=_ai_connection_string,
+        enable_live_metrics=True,
+        logger_name="grc-agent",
+        resource=Resource.create({"service.name": _service_name}),
+    )
+    # Register a custom SpanProcessor that adds gen_ai.system to GenAI
+    # spans so the Foundry Tracing blade can discover them.
+    _provider = trace.get_tracer_provider()
+    _real = getattr(_provider, "_real_tracer_provider", _provider)
+    if hasattr(_real, "add_span_processor"):
+        _real.add_span_processor(_GenAISpanEnricher())
+        print("  ↳ GenAI span enricher registered")
+    print(f"✓ Application Insights telemetry enabled (service.name={_service_name})")
+else:
+    print("⚠ APPLICATIONINSIGHTS_CONNECTION_STRING not set — telemetry disabled")
+
+# ---------------------------------------------------------------------------
+# Azure AI Foundry / OpenAI SDK Tracing
+# ---------------------------------------------------------------------------
+# Instrument the OpenAI Python SDK so that every chat-completion call emits
+# OpenTelemetry spans with GenAI semantic conventions (model, token counts,
+# prompt/completion content).  These traces are exported to the Application
+# Insights resource connected to the AI Foundry project, making them visible
+# in the Foundry "Tracing" blade.
+# ---------------------------------------------------------------------------
+try:
+    from opentelemetry.instrumentation.openai_v2 import OpenAIInstrumentor
+    OpenAIInstrumentor().instrument()
+    print("✓ OpenAI SDK tracing enabled (Azure AI Foundry)")
+except ImportError:
+    print("⚠ opentelemetry-instrumentation-openai-v2 not installed — GenAI tracing disabled")
+
+# Get a tracer for custom spans
+tracer = trace.get_tracer(__name__)
+
+# Set up a named logger that funnels into App Insights
+logger = logging.getLogger("grc-agent")
+logger.setLevel(logging.INFO)
+
 # Create Flask app
 app = Flask(__name__)
 CORS(app)
+
+# Explicitly instrument Flask for request telemetry
+FlaskInstrumentor().instrument_app(app)
 
 # File upload configuration
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
@@ -111,8 +223,31 @@ def chat():
             if agent.agent is None:
                 loop.run_until_complete(agent.initialize())
             
-            # Get response
-            response = loop.run_until_complete(agent.chat(full_message))
+            # Get response — wrapped in a custom span for App Insights
+            start_time = time.time()
+            with tracer.start_as_current_span("chat_completion") as span:
+                span.set_attribute("gen_ai.system", "openai")
+                span.set_attribute("gen_ai.operation.name", "chat")
+                span.set_attribute("chat.message_length", len(full_message))
+                span.set_attribute("chat.has_attachments", bool(file_ids))
+
+                response = loop.run_until_complete(agent.chat(full_message))
+
+                elapsed = time.time() - start_time
+                span.set_attribute("chat.response_length", len(response))
+                span.set_attribute("chat.duration_seconds", round(elapsed, 3))
+
+                logger.info(
+                    "Chat completed",
+                    extra={
+                        "custom_dimensions": {
+                            "message_length": len(full_message),
+                            "response_length": len(response),
+                            "duration_seconds": round(elapsed, 3),
+                            "has_attachments": bool(file_ids),
+                        }
+                    },
+                )
             
             # Store in conversation history
             conversation_history.append({
@@ -133,7 +268,7 @@ def chat():
             loop.close()
         
     except Exception as e:
-        print(f"Error in chat endpoint: {e}")
+        logger.exception("Error in chat endpoint: %s", e)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -232,7 +367,7 @@ def chat_stream():
         return Response(generate(), mimetype='text/event-stream')
         
     except Exception as e:
-        print(f"Error in streaming chat endpoint: {e}")
+        logger.exception("Error in streaming chat endpoint: %s", e)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -299,7 +434,7 @@ def extract_text_from_file(filepath, filename):
             content = f.read()
         return content
     except Exception as e:
-        print(f"Error reading file {filename}: {e}")
+        logger.exception("Error reading file %s: %s", filename, e)
         return None
 
 
@@ -367,7 +502,7 @@ def upload_file():
         })
         
     except Exception as e:
-        print(f"Error uploading file: {e}")
+        logger.exception("Error uploading file: %s", e)
         return jsonify({
             'success': False,
             'error': str(e)

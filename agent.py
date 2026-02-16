@@ -31,7 +31,7 @@ class ChatBotAgent:
         """Initialize the chat bot agent with Azure AI configuration"""
         self.endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
         self.deployment_name = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
-        self.api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2025-06-01-preview")
+        self.api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2025-04-01-preview")
         self.agent_name = os.getenv("AGENT_NAME", "ChatBot Agent")
         self.instructions_file = os.getenv("AGENT_INSTRUCTIONS_FILE", "agent_instructions_placeholder.txt")
         
@@ -108,7 +108,7 @@ class ChatBotAgent:
         """Initialize the Azure Agent Framework agent"""
         try:
             # Import Azure Agent Framework components
-            from agent_framework import ChatAgent
+            from agent_framework import Agent
             from agent_framework.azure import AzureOpenAIChatClient
             
             # Create Azure OpenAI chat client based on auth type
@@ -133,10 +133,10 @@ class ChatBotAgent:
                 print(f"✓ Using API key authentication")
             
             # Create the chat agent
-            self.agent = ChatAgent(
-                name=self.agent_name,
-                chat_client=self.chat_client,
-                instructions=self.instructions
+            self.agent = Agent(
+                client=self.chat_client,
+                instructions=self.instructions,
+                name=self.agent_name
             )
             
             print(f"✓ Agent '{self.agent_name}' initialized successfully")
@@ -168,8 +168,8 @@ class ChatBotAgent:
             result = await self.agent.run(message)
             
             # Extract the response text
-            if hasattr(result, 'content'):
-                return result.content
+            if hasattr(result, 'text'):
+                return result.text
             elif isinstance(result, str):
                 return result
             else:
@@ -195,9 +195,9 @@ class ChatBotAgent:
         
         try:
             # Run the agent with streaming enabled
-            async for chunk in self.agent.run_stream(message):
-                if hasattr(chunk, 'content'):
-                    yield chunk.content
+            async for chunk in self.agent.run(message, stream=True):
+                if hasattr(chunk, 'text'):
+                    yield chunk.text
                 else:
                     yield str(chunk)
                     

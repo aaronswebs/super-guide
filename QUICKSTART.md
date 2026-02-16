@@ -75,7 +75,7 @@ nano .env  # Or use your preferred editor
 ```bash
 AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com/
 AZURE_OPENAI_DEPLOYMENT_NAME=gpt-5-deployment
-AZURE_OPENAI_API_VERSION=2025-06-01-preview
+AZURE_OPENAI_API_VERSION=2025-04-01-preview
 
 # Authentication: "managed_identity" (default) or "api_key"
 AZURE_OPENAI_AUTH_TYPE=managed_identity

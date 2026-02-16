@@ -1,10 +1,10 @@
-# Azure Agent Framework and dependencies
-agent-framework>=0.1.0
-agent-framework-azure-ai>=0.1.0
+# Azure Agent Framework and dependencies (pre-release only - must pin exact versions)
+agent-framework==1.0.0b260212
+agent-framework-azure-ai==1.0.0b260212
 
-# Azure SDK
+# Azure SDK (pre-release only - must pin exact versions)
 azure-identity>=1.15.0
-azure-ai-inference>=1.0.0
+azure-ai-inference==1.0.0b9
 
 # Web framework for UI
 flask>=3.0.0
@@ -16,3 +16,11 @@ python-dotenv>=1.0.0
 # Async support
 aiohttp>=3.9.0
 asyncio>=3.4.3
+
+# Application Insights / Azure Monitor telemetry
+azure-monitor-opentelemetry>=1.6.0
+opentelemetry-instrumentation-flask>=0.48b0
+
+# Azure AI Foundry tracing (GenAI semantic conventions)
+opentelemetry-instrumentation-openai-v2>=2.0b0
+azure-core-tracing-opentelemetry>=1.0.0b11

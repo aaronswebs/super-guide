@@ -107,7 +107,7 @@ def main():
     
     api_version = get_user_input(
         "API Version",
-        default="2025-06-01-preview",
+        default="2025-04-01-preview",
         required=False
     )
     

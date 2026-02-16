@@ -125,7 +125,7 @@ After deployment:
    # Required: Azure OpenAI/AI Foundry Configuration
    AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com/
    AZURE_OPENAI_DEPLOYMENT_NAME=gpt-5-deployment
-   AZURE_OPENAI_API_VERSION=2025-06-01-preview
+   AZURE_OPENAI_API_VERSION=2025-04-01-preview
 
    # Authentication Type: "managed_identity" (default) or "api_key"
    # managed_identity uses Azure Entra ID via DefaultAzureCredential (recommended).
@@ -300,7 +300,7 @@ You:
 | `AZURE_OPENAI_AUTH_TYPE` | ⚪ No | Authentication mode: `managed_identity` (default) or `api_key` | `managed_identity` |
 | `AZURE_OPENAI_API_KEY` | ⚠️ Conditional | Required only when `AUTH_TYPE=api_key` | `abc123...` |
 | `AZURE_OPENAI_DEPLOYMENT_NAME` | ✅ Yes | Name of your GPT-5 deployment | `gpt-5-deployment` |
-| `AZURE_OPENAI_API_VERSION` | ⚪ No | API version to use | `2025-06-01-preview` |
+| `AZURE_OPENAI_API_VERSION` | ⚪ No | API version to use | `2025-04-01-preview` |
 | `AZURE_SUBSCRIPTION_ID` | ⚪ No | Your Azure subscription ID | `12345678-1234-...` |
 | `AZURE_RESOURCE_GROUP` | ⚪ No | Your Azure resource group name | `my-resource-group` |
 | `AZURE_AI_PROJECT_NAME` | ⚪ No | Your AI Foundry project name | `my-ai-project` |
