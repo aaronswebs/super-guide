@@ -20,20 +20,16 @@ load_dotenv()
 # ---------------------------------------------------------------------------
 # Azure AI Foundry Tracing – Environment Variables
 # ---------------------------------------------------------------------------
-# AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED  – azure-core-tracing SDK
-# OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT – opentelemetry-instrumentation-openai-v2
-# ENABLE_INSTRUMENTATION – Agent Framework ChatTelemetryLayer (must be "true"
-#     for the framework's own span creation and attribute recording)
-# ENABLE_SENSITIVE_DATA – Agent Framework _capture_messages() (must be "true"
-#     together with ENABLE_INSTRUMENTATION for LLM input/output content to be
-#     recorded as span events visible in the Foundry Classic Tracing blade)
-# All must be "true" for full prompt/completion capture across all layers.
-# Set to "false" in production if prompt content is sensitive.
+# Per the Microsoft Foundry Classic docs ("Instrument the OpenAI SDK"):
+#   https://learn.microsoft.com/azure/ai-foundry/how-to/develop/trace-application
+#
+# OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT – Tells the
+#   opentelemetry-instrumentation-openai-v2 instrumentor to record LLM
+#   input/output content as span events.  These events populate the
+#   "Input" and "Output" columns in the Foundry Classic Tracing blade.
+#   Set to "false" in production if prompt content is sensitive.
 # ---------------------------------------------------------------------------
-os.environ.setdefault("AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED", "true")
 os.environ.setdefault("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", "true")
-os.environ.setdefault("ENABLE_INSTRUMENTATION", "true")
-os.environ.setdefault("ENABLE_SENSITIVE_DATA", "true")
 
 # Set OTEL_SERVICE_NAME so the Foundry Tracing blade can identify these traces.
 os.environ.setdefault("OTEL_SERVICE_NAME", os.getenv("AZURE_AI_PROJECT_NAME", "grc-agent"))
@@ -47,9 +43,41 @@ os.environ.setdefault("OTEL_SERVICE_NAME", os.getenv("AZURE_AI_PROJECT_NAME", "g
 # ---------------------------------------------------------------------------
 from azure.monitor.opentelemetry import configure_azure_monitor
 from opentelemetry import trace
+from opentelemetry._logs import get_logger_provider
+from opentelemetry.sdk._logs import LogRecordProcessor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import SpanProcessor
 from opentelemetry.instrumentation.flask import FlaskInstrumentor
+
+
+class _EventNameInjector(LogRecordProcessor):
+    """Copies ``LogRecord.event_name`` into ``attributes["event.name"]``.
+
+    The ``opentelemetry-instrumentation-openai-v2`` instrumentor creates
+    LogRecords with ``event_name`` set (e.g. ``"gen_ai.user.message"``,
+    ``"gen_ai.choice"``) via the OTel Events/Logs API.  However, the
+    Azure Monitor exporter (v1.0.0b48) only reads ``log_record.attributes``
+    when building ``customDimensions`` — it never reads the ``event_name``
+    property.  Without ``event.name`` in ``customDimensions``, the Foundry
+    Classic Tracing blade cannot categorise events as Input vs Output.
+
+    This processor runs **before** the batch exporter ships the record to
+    App Insights, injecting ``event.name`` into the mutable
+    ``BoundedAttributes`` dict so the exporter preserves it.
+    """
+
+    def on_emit(self, log_data):
+        log_record = log_data.log_record
+        event_name = getattr(log_record, "event_name", None)
+        if event_name:
+            # BoundedAttributes is mutable (immutable=False) at this stage
+            log_record.attributes["event.name"] = event_name
+
+    def shutdown(self):
+        pass
+
+    def force_flush(self, timeout_millis=None):
+        return True
 
 
 class _GenAISpanEnricher(SpanProcessor):
@@ -94,7 +122,6 @@ if _ai_connection_string:
     configure_azure_monitor(
         connection_string=_ai_connection_string,
         enable_live_metrics=True,
-        logger_name="grc-agent",
         resource=Resource.create({"service.name": _service_name}),
     )
     # Register a custom SpanProcessor that adds gen_ai.system to GenAI
@@ -104,39 +131,40 @@ if _ai_connection_string:
     if hasattr(_real, "add_span_processor"):
         _real.add_span_processor(_GenAISpanEnricher())
         print("  ↳ GenAI span enricher registered")
+
+    # Register a LogRecordProcessor that injects event.name into attributes
+    # so the Azure Monitor exporter includes it in customDimensions.
+    # Without this, Foundry Classic cannot populate Input/Output columns.
+    _log_provider = get_logger_provider()
+    _real_log = getattr(_log_provider, "_real_logger_provider", _log_provider)
+    if hasattr(_real_log, "add_log_record_processor"):
+        _real_log.add_log_record_processor(_EventNameInjector())
+        print("  ↳ EventName injector registered (Foundry Input/Output)")
+
     print(f"✓ Application Insights telemetry enabled (service.name={_service_name})")
 else:
     print("⚠ APPLICATIONINSIGHTS_CONNECTION_STRING not set — telemetry disabled")
 
 # ---------------------------------------------------------------------------
-# Agent Framework – ChatTelemetryLayer activation
+# Azure AI Foundry / OpenAI SDK Tracing  (Foundry Classic docs pattern)
 # ---------------------------------------------------------------------------
-# The Agent Framework's AzureOpenAIChatClient inherits from ChatTelemetryLayer
-# which wraps every get_response() call with OpenTelemetry spans.  However,
-# the telemetry layer is **gated** by ObservabilitySettings:
-#   - OBSERVABILITY_SETTINGS.ENABLED  → must be True for any spans
-#   - OBSERVABILITY_SETTINGS.SENSITIVE_DATA_ENABLED → must be True for
-#     _capture_messages() to record LLM input/output as span events
+# Per the docs, the minimal instrumentation is:
+#   configure_azure_monitor(connection_string=connection_string)
+#   OpenAIInstrumentor().instrument()
 #
-# Setting the env vars above handles the default path, but we also call
-# enable_instrumentation() explicitly to cover cases where the settings
-# object was already constructed before the env vars took effect.
-# ---------------------------------------------------------------------------
-try:
-    from agent_framework.observability import enable_instrumentation as _af_enable
-    _af_enable(enable_sensitive_data=True)
-    print("✓ Agent Framework ChatTelemetryLayer enabled (sensitive data capture ON)")
-except ImportError:
-    print("⚠ agent_framework.observability not available — framework telemetry not activated")
-
-# ---------------------------------------------------------------------------
-# Azure AI Foundry / OpenAI SDK Tracing
-# ---------------------------------------------------------------------------
-# Instrument the OpenAI Python SDK so that every chat-completion call emits
-# OpenTelemetry spans with GenAI semantic conventions (model, token counts,
-# prompt/completion content).  These traces are exported to the Application
-# Insights resource connected to the AI Foundry project, making them visible
-# in the Foundry "Tracing" blade.
+# The OpenAI instrumentor monkey-patches the openai Python SDK (both sync
+# and async clients) so every chat.completions.create() call emits:
+#   • A GenAI span with model, token counts, finish_reason
+#   • Span events with input/output message content (when the
+#     OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT env var is "true")
+#
+# These events are what the Foundry Classic Tracing blade reads to populate
+# the "Input" and "Output" columns.
+#
+# IMPORTANT: Do NOT also activate the Agent Framework's ChatTelemetryLayer
+# (via ENABLE_INSTRUMENTATION / enable_instrumentation()).  That layer
+# creates a *duplicate* "chat <model>" span using non-standard attributes
+# which can confuse the Foundry blade and hide the real input/output.
 # ---------------------------------------------------------------------------
 try:
     from opentelemetry.instrumentation.openai_v2 import OpenAIInstrumentor
