@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azure Agent Chat Bot</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .chat-container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 800px;
+            height: 90vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            border-radius: 16px 16px 0 0;
+        }
+
+        .chat-header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .chat-header p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .context-indicator {
+            font-size: 12px;
+            margin-top: 8px;
+            padding: 6px 12px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            display: inline-block;
+        }
+
+        .context-indicator .badge {
+            background: rgba(255, 255, 255, 0.9);
+            color: #667eea;
+            padding: 2px 8px;
+            border-radius: 8px;
+            font-weight: 600;
+            margin-left: 6px;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+
+        .message {
+            margin-bottom: 20px;
+            display: flex;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.user {
+            justify-content: flex-end;
+        }
+
+        .message-content {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            word-wrap: break-word;
+            line-height: 1.5;
+        }
+
+        .message.user .message-content {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 12px 12px 0 12px;
+        }
+
+        .message.assistant .message-content {
+            background: white;
+            color: #333;
+            border: 1px solid #e0e0e0;
+            border-radius: 12px 12px 12px 0;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .message-label {
+            font-size: 12px;
+            margin-bottom: 4px;
+            opacity: 0.7;
+            font-weight: 500;
+        }
+
+        .message.user .message-label {
+            text-align: right;
+        }
+
+        .typing-indicator {
+            display: none;
+            padding: 12px 16px;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            width: fit-content;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .typing-indicator.active {
+            display: block;
+        }
+
+        .typing-indicator span {
+            height: 8px;
+            width: 8px;
+            background: #667eea;
+            border-radius: 50%;
+            display: inline-block;
+            margin: 0 2px;
+            animation: typing 1.4s infinite;
+        }
+
+        .typing-indicator span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-indicator span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes typing {
+            0%, 60%, 100% {
+                transform: translateY(0);
+                opacity: 0.7;
+            }
+            30% {
+                transform: translateY(-10px);
+                opacity: 1;
+            }
+        }
+
+        .chat-input-container {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            gap: 10px;
+        }
+
+        #messageInput {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 24px;
+            font-size: 15px;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        #messageInput:focus {
+            border-color: #667eea;
+        }
+
+        #sendButton {
+            padding: 12px 28px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 24px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        #sendButton:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        #sendButton:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .clear-button {
+            padding: 8px 16px;
+            background: transparent;
+            color: #667eea;
+            border: 2px solid #667eea;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+
+        .clear-button:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .error-message {
+            background: #fee;
+            color: #c33;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 10px 20px;
+            border-left: 4px solid #c33;
+        }
+
+        /* Scrollbar styling */
+        .chat-messages::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .chat-messages::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: #667eea;
+            border-radius: 4px;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb:hover {
+            background: #764ba2;
+        }
+
+        .context-info {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            margin: 10px 20px;
+            border-left: 4px solid #667eea;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .context-info h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .context-source {
+            font-size: 13px;
+            padding: 6px 0;
+            color: #555;
+            display: flex;
+            align-items: center;
+        }
+
+        .context-source::before {
+            content: "✓";
+            color: #667eea;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+
+        .no-context {
+            font-size: 13px;
+            color: #888;
+            font-style: italic;
+        }
+
+        /* Attachment styles */
+        .attachment-button {
+            background: transparent;
+            border: 2px solid #e0e0e0;
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            flex-shrink: 0;
+        }
+
+        .attachment-button:hover {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.1);
+        }
+
+        .attachment-button svg {
+            width: 20px;
+            height: 20px;
+            color: #667eea;
+        }
+
+        .attached-files-container {
+            padding: 10px 20px;
+            background: #f8f9fa;
+            border-top: 1px solid #e0e0e0;
+            display: none;
+        }
+
+        .attached-files-container.has-files {
+            display: block;
+        }
+
+        .attached-files-label {
+            font-size: 12px;
+            color: #667eea;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .attached-file {
+            display: inline-flex;
+            align-items: center;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 16px;
+            padding: 6px 12px;
+            margin-right: 8px;
+            margin-bottom: 8px;
+            font-size: 13px;
+            color: #333;
+        }
+
+        .attached-file-icon {
+            margin-right: 6px;
+            color: #667eea;
+        }
+
+        .attached-file-name {
+            max-width: 150px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .attached-file-remove {
+            margin-left: 8px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #888;
+            font-size: 16px;
+            line-height: 1;
+            padding: 0;
+            transition: color 0.2s;
+        }
+
+        .attached-file-remove:hover {
+            color: #c33;
+        }
+
+        .file-uploading {
+            opacity: 0.6;
+        }
+
+        .message-attachments {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(0,0,0,0.1);
+        }
+
+        .message-attachment-badge {
+            font-size: 11px;
+            background: rgba(102, 126, 234, 0.2);
+            color: #667eea;
+            padding: 2px 8px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .message.user .message-attachment-badge {
+            background: rgba(255,255,255,0.2);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>🤖 Azure Agent Chat Bot</h1>
+            <p>Powered by GPT-5 via Azure AI Agent Service</p>
+            <div class="context-indicator" id="contextIndicator" style="display: none;">
+                Context Sources: <span class="badge" id="contextCount">0</span>
+            </div>
+            <button class="clear-button" id="newChatButton">🔄 New Chat</button>
+        </div>
+        
+        <div class="chat-messages" id="chatMessages">
+            <div class="message assistant">
+                <div>
+                    <div class="message-label">Agent</div>
+                    <div class="message-content">
+                        Hello! I'm your AI assistant powered by Azure AI Agent Service and GPT-5. How can I help you today?
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Context sources will be dynamically inserted here -->
+            <div id="contextInfo"></div>
+        </div>
+        
+        <!-- Attached files display -->
+        <div class="attached-files-container" id="attachedFilesContainer">
+            <div class="attached-files-label">📎 Attached Files</div>
+            <div id="attachedFilesList"></div>
+        </div>
+        
+        <div class="chat-input-container">
+            <!-- Hidden file input -->
+            <input 
+                type="file" 
+                id="fileInput" 
+                style="display: none;"
+                accept=".txt,.pdf,.md,.json,.csv,.xml,.html,.py,.js,.ts,.yaml,.yml"
+                multiple
+            >
+            
+            <!-- Attachment button -->
+            <button class="attachment-button" id="attachButton" title="Attach files">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                </svg>
+            </button>
+            
+            <input 
+                type="text" 
+                id="messageInput" 
+                placeholder="Type your message here..."
+                autocomplete="off"
+            >
+            <button id="sendButton">Send</button>
+        </div>
+    </div>
+
+    <script>
+        const chatMessages = document.getElementById('chatMessages');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const contextIndicator = document.getElementById('contextIndicator');
+        const contextCount = document.getElementById('contextCount');
+        const contextInfo = document.getElementById('contextInfo');
+        const fileInput = document.getElementById('fileInput');
+        const attachButton = document.getElementById('attachButton');
+        const attachedFilesContainer = document.getElementById('attachedFilesContainer');
+        const attachedFilesList = document.getElementById('attachedFilesList');
+        
+        let isProcessing = false;
+        
+        // Session tracking for conversation context retention
+        let sessionId = crypto.randomUUID();
+        
+        // Store attached files
+        let attachedFiles = [];
+
+        // Load context sources on page load
+        async function loadContextSources() {
+            try {
+                const response = await fetch('/api/context/sources');
+                const data = await response.json();
+                
+                if (data.success && data.enabled_count > 0) {
+                    // Update header indicator
+                    contextCount.textContent = data.enabled_count;
+                    contextIndicator.style.display = 'inline-block';
+                    
+                    // Display enabled sources in the chat area
+                    const enabledSources = data.sources.filter(s => s.enabled);
+                    if (enabledSources.length > 0) {
+                        const contextDiv = document.createElement('div');
+                        contextDiv.className = 'context-info';
+                        contextDiv.innerHTML = `
+                            <h3>📚 Active Context Sources</h3>
+                            ${enabledSources.map(source => `
+                                <div class="context-source">${source.name}</div>
+                            `).join('')}
+                        `;
+                        contextInfo.appendChild(contextDiv);
+                        scrollToBottom();
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load context sources:', error);
+            }
+        }
+
+        // File attachment functions
+        function updateAttachedFilesDisplay() {
+            if (attachedFiles.length === 0) {
+                attachedFilesContainer.classList.remove('has-files');
+                attachedFilesList.innerHTML = '';
+                return;
+            }
+            
+            attachedFilesContainer.classList.add('has-files');
+            attachedFilesList.innerHTML = attachedFiles.map(file => `
+                <div class="attached-file ${file.uploading ? 'file-uploading' : ''}" data-file-id="${file.file_id || ''}">
+                    <span class="attached-file-icon">📄</span>
+                    <span class="attached-file-name" title="${escapeHtml(file.filename)}">${escapeHtml(file.filename)}</span>
+                    ${file.uploading ? '<span style="margin-left: 6px; font-size: 11px;">Uploading...</span>' : 
+                        `<button class="attached-file-remove" onclick="removeAttachedFile('${file.file_id}')" title="Remove">×</button>`}
+                </div>
+            `).join('');
+        }
+
+        async function uploadFile(file) {
+            const tempId = 'temp_' + Date.now();
+            
+            // Show uploading state
+            attachedFiles.push({
+                tempId: tempId,
+                filename: file.name,
+                uploading: true
+            });
+            updateAttachedFilesDisplay();
+            
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Replace temp entry with real one
+                    const index = attachedFiles.findIndex(f => f.tempId === tempId);
+                    if (index !== -1) {
+                        attachedFiles[index] = {
+                            file_id: data.file_id,
+                            filename: data.filename,
+                            content_length: data.content_length,
+                            uploading: false
+                        };
+                    }
+                } else {
+                    // Remove failed upload
+                    attachedFiles = attachedFiles.filter(f => f.tempId !== tempId);
+                    showError(`Failed to upload ${file.name}: ${data.error}`);
+                }
+            } catch (error) {
+                attachedFiles = attachedFiles.filter(f => f.tempId !== tempId);
+                showError(`Failed to upload ${file.name}: ${error.message}`);
+            }
+            
+            updateAttachedFilesDisplay();
+        }
+
+        async function removeAttachedFile(fileId) {
+            try {
+                const response = await fetch(`/api/upload/${fileId}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success || response.status === 404) {
+                    attachedFiles = attachedFiles.filter(f => f.file_id !== fileId);
+                    updateAttachedFilesDisplay();
+                }
+            } catch (error) {
+                console.error('Failed to remove file:', error);
+                // Remove from UI anyway
+                attachedFiles = attachedFiles.filter(f => f.file_id !== fileId);
+                updateAttachedFilesDisplay();
+            }
+        }
+
+        function handleFileSelect(event) {
+            const files = Array.from(event.target.files);
+            files.forEach(file => uploadFile(file));
+            // Reset input so same file can be selected again
+            event.target.value = '';
+        }
+
+        // Add typing indicator element
+        const typingIndicator = document.createElement('div');
+        typingIndicator.className = 'typing-indicator';
+        typingIndicator.innerHTML = '<span></span><span></span><span></span>';
+
+        function addMessage(role, content, attachments = []) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+            
+            const label = role === 'user' ? 'You' : 'Agent';
+            
+            let attachmentsHtml = '';
+            if (attachments && attachments.length > 0) {
+                attachmentsHtml = `
+                    <div class="message-attachments">
+                        ${attachments.map(a => `
+                            <span class="message-attachment-badge">📎 ${escapeHtml(a.filename)}</span>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
+            messageDiv.innerHTML = `
+                <div>
+                    <div class="message-label">${label}</div>
+                    <div class="message-content">${escapeHtml(content)}${attachmentsHtml}</div>
+                </div>
+            `;
+            
+            chatMessages.appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        function showTypingIndicator() {
+            chatMessages.appendChild(typingIndicator);
+            typingIndicator.classList.add('active');
+            scrollToBottom();
+        }
+
+        function hideTypingIndicator() {
+            typingIndicator.classList.remove('active');
+            if (typingIndicator.parentNode) {
+                typingIndicator.parentNode.removeChild(typingIndicator);
+            }
+        }
+
+        function scrollToBottom() {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.textContent = `Error: ${message}`;
+            chatMessages.appendChild(errorDiv);
+            scrollToBottom();
+            
+            setTimeout(() => {
+                errorDiv.remove();
+            }, 5000);
+        }
+
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            
+            if (!message || isProcessing) {
+                return;
+            }
+            
+            // Check if any files are still uploading
+            if (attachedFiles.some(f => f.uploading)) {
+                showError('Please wait for files to finish uploading');
+                return;
+            }
+            
+            // Get current attachments for display
+            const currentAttachments = [...attachedFiles];
+            const fileIds = currentAttachments.map(f => f.file_id).filter(Boolean);
+            
+            // Add user message with attachments
+            addMessage('user', message, currentAttachments);
+            messageInput.value = '';
+            
+            // Clear attachments after sending
+            attachedFiles = [];
+            updateAttachedFilesDisplay();
+            
+            // Show typing indicator
+            showTypingIndicator();
+            isProcessing = true;
+            sendButton.disabled = true;
+            
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ 
+                        message: message,
+                        file_ids: fileIds,
+                        session_id: sessionId
+                    })
+                });
+                
+                const data = await response.json();
+                
+                hideTypingIndicator();
+                
+                if (data.success) {
+                    // Capture server-assigned session_id if returned
+                    if (data.session_id) {
+                        sessionId = data.session_id;
+                    }
+                    addMessage('assistant', data.response);
+                } else {
+                    showError(data.error || 'Unknown error occurred');
+                }
+            } catch (error) {
+                hideTypingIndicator();
+                showError(error.message);
+            } finally {
+                isProcessing = false;
+                sendButton.disabled = false;
+                messageInput.focus();
+            }
+        }
+
+        // Event listeners
+        sendButton.addEventListener('click', sendMessage);
+        
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+        
+        // File attachment event listeners
+        attachButton.addEventListener('click', () => {
+            fileInput.click();
+        });
+        
+        fileInput.addEventListener('change', handleFileSelect);
+
+        // New Chat button handler
+        document.getElementById('newChatButton').addEventListener('click', async () => {
+            // Clear server-side session
+            try {
+                await fetch('/api/history/clear', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: sessionId })
+                });
+            } catch (e) {
+                console.error('Failed to clear server session:', e);
+            }
+            // Reset session
+            sessionId = crypto.randomUUID();
+            // Clear chat UI — keep only the initial greeting
+            chatMessages.innerHTML = `
+                <div class="message assistant">
+                    <div>
+                        <div class="message-label">Agent</div>
+                        <div class="message-content">
+                            Hello! I'm your AI assistant powered by Azure Agent Framework and GPT-5. How can I help you today?
+                        </div>
+                    </div>
+                </div>
+                <div id="contextInfo"></div>
+            `;
+            // Reload context sources
+            loadContextSources();
+            messageInput.focus();
+        });
+
+        // Load context sources when page loads
+        loadContextSources();
+
+        // Focus input on load
+        messageInput.focus();
+    </script>
+</body>
+</html>

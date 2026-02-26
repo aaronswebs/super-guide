@@ -1,0 +1,65 @@
+# Example AI/ML Governance Policy
+
+## Purpose
+This policy establishes governance principles and guidelines for the responsible development, deployment, and use of Artificial Intelligence and Machine Learning systems.
+
+## Core Principles
+
+### 1. Ethical AI Development
+- Design AI systems that are fair, transparent, and accountable
+- Avoid bias in training data and model outputs
+- Conduct regular bias audits and fairness assessments
+- Document model limitations and potential failure modes
+
+### 2. Transparency and Explainability
+- Maintain clear documentation of AI system capabilities and limitations
+- Provide explanations for AI-driven decisions when required
+- Disclose when users are interacting with AI systems
+- Make model cards available for significant AI deployments
+
+### 3. Data Governance for AI
+- Use only authorized and properly licensed data for training
+- Ensure data quality, accuracy, and representativeness
+- Protect personal data and respect privacy rights
+- Implement data lineage tracking for AI training datasets
+
+### 4. Model Development and Testing
+- Follow established AI development lifecycle processes
+- Conduct thorough testing including edge cases and adversarial testing
+- Implement version control for models and training data
+- Perform security assessments for AI systems
+
+### 5. Human Oversight
+- Maintain human-in-the-loop for critical decisions
+- Provide mechanisms for users to challenge AI decisions
+- Establish clear escalation paths for AI-related issues
+- Regular review of automated decision-making processes
+
+### 6. Risk Management
+- Conduct AI impact assessments for new systems
+- Identify and mitigate potential risks and harms
+- Monitor AI systems continuously for drift and degradation
+- Implement fail-safe mechanisms and rollback procedures
+
+### 7. Responsible Use
+- Use AI systems only for their intended purposes
+- Prohibit use of AI for harmful or discriminatory purposes
+- Respect intellectual property and licensing requirements
+- Consider societal impact of AI deployments
+
+### 8. Continuous Monitoring
+- Implement ongoing monitoring for model performance
+- Track and address model drift and data drift
+- Regular audits of AI system outputs and impacts
+- Incident reporting and response procedures
+
+## Compliance
+This policy aligns with EU AI Act, NIST AI Risk Management Framework, and ISO/IEC standards for AI.
+
+## Governance Structure
+- AI Ethics Board reviews high-risk AI systems
+- Data Science teams responsible for technical compliance
+- Legal and compliance teams ensure regulatory adherence
+
+## Review
+This policy is reviewed bi-annually and updated to reflect evolving best practices.

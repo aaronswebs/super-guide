@@ -1,0 +1,15 @@
+# PLACEHOLDER: Agent Instructions
+# 
+# This file contains the instructions for your AI agent.
+# Replace this entire file with your pre-existing agent instruction file.
+#
+# Instructions should define:
+# - The agent's role and personality
+# - How the agent should respond to user queries
+# - Any specific guidelines or constraints
+# - Examples of desired behavior
+#
+# Example format:
+# You are a helpful assistant that provides accurate and concise information.
+# Always be polite and professional in your responses.
+# If you don't know the answer, admit it rather than making up information.
